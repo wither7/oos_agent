@@ -11,7 +11,6 @@ app.secret_key = secrets.token_urlsafe(16)
 
 CLIENT_ID = "4071151845732613353"
 REDIRECT_URI = "http://127.0.0.1:5000/oauth/callback"
-
 DISCOVERY_URL = "https://openapi-mcp.cn-hangzhou.aliyuncs.com/.well-known/oauth-authorization-server"
 
 def set_key(key, value):

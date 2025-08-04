@@ -3,19 +3,17 @@ import os
 from textwrap import dedent
 from agno.tools.mcp import MCPTools, StreamableHTTPClientParams
 from agno.models.openai.like import OpenAILike
+import os
 # from mcp.client.streamable_http import streamablehttp_client
 # from mcp import ClientSession
 import asyncio
 from agno.agent import Agent, RunResponse
 import json
-# Important: Just to avoid such logging error like "JSONRPCError.jsonrpc Field required ...
-import logging
-# logging.basicConfig(level=logging.DEBUG)
 print(f"Current path is {os.getcwd()}")
 from access_token import load_keys
-# load_keys()
 
 def get_selected_tools_list(server_url, hearders, llm_api_key, user_question):
+    # 获取所有可用的tools, 并且根据用户问题，选择最相关的tool
     from mcp.client.streamable_http import streamablehttp_client
     from mcp import ClientSession
     import asyncio
@@ -29,7 +27,7 @@ def get_selected_tools_list(server_url, hearders, llm_api_key, user_question):
     all_tools = None
     async def get_all_tools():
         # Connect to a streamable HTTP server
-        async with streamablehttp_client(url=server_url,headers=hearders)as(read_stream, write_stream,_):
+        async with streamablehttp_client(url=server_url,headers=hearders) as (read_stream, write_stream,_):
             # Create a session using the client streams
             async with ClientSession(read_stream, write_stream) as session:
                 await session.initialize()
@@ -58,7 +56,8 @@ def get_selected_tools_list(server_url, hearders, llm_api_key, user_question):
 
     # 4. Run the agent to tell us which tools are needed for user questio
     prompt = (
-        f"请根据提供的工具信息以及用户请求，你需要给出可能需要调用的api列表，以Json形式返回，要精简、不需要其他信息。格式上，返回值不带```、json等字符串，"
+        f"1. 首先根据用户的请求, 识别用户的具体意图"
+        f"2. 根据提供的工具信息以及用户请求，你需要给出最有可能需要调用的api列表，以Json形式返回，要精简、不需要其他信息。格式上，返回值不带```、json等字符串，"
         f"工具信息如下：{json.dumps(brife_tools_info)},"
         f"现在客户提问：{user_question}"
     )
@@ -67,41 +66,6 @@ def get_selected_tools_list(server_url, hearders, llm_api_key, user_question):
     tool_to_use_list = json.loads(response.content)
     print(f"Selected Tool List: {tool_to_use_list}")
     return tool_to_use_list
-
-
-async def run_agent_multi_mcp(message) -> None:
-
-    ecs_server_params = StreamableHTTPClientParams(
-        url = "https://openapi-mcp.cn-hangzhou.aliyuncs.com/accounts/1099419160256021/custom/ecs_base/id/1HP5DTSlYbLjFAwL/mcp",
-        headers = {'Authorization': f'Bearer {os.getenv("ALI_OPENAPI_ACCESS_TOKEN")}'}
-    )
-    ecs_agent_server_params = StreamableHTTPClientParams(
-        url = "https://openapi-mcp.cn-hangzhou.aliyuncs.com/accounts/1099419160256021/custom/ecs_agent/id/tq3oPa8Q3xJuFv90/mcp",
-        headers = {'Authorization': f'Bearer {os.getenv("ALI_OPENAPI_ACCESS_TOKEN")}'}
-    )
-
-
-    async with MCPTools(server_params=ecs_server_params, transport="streamable-http", timeout_seconds=30 ) as ecs, \
-        MCPTools(server_params=ecs_agent_server_params, transport="streamable-http", timeout_seconds=30 ) as ecs_agent:
-        # Initialize the model
-        model=OpenAILike(id="qwen-max",
-                         api_key=os.getenv("DASHSCOPE_API_KEY"),
-                         base_url="https://dashscope.aliyuncs.com/compatible-mode/v1")
-        # Initialize the agent
-        agent = Agent(model=model,
-                      tools=[ecs, ecs_agent],
-                      instructions=dedent("""\
-                          你是一个阿里云云计算专家，请根据用户的问题，使用MCP服务查询阿里云的云产品信息，给出详细的解释。
-                          请使用中文回答
-                          每轮回复中, 只调用最相关的 MCP 工具
-                      """),
-                      markdown=True,
-                      show_tool_calls=True)
-
-        # Initialize the model
-
-    # Run the agent
-    await agent.aprint_response(message, stream=True)
 
 
 async def run_agent(config):
@@ -113,7 +77,7 @@ async def run_agent(config):
                         timeout_seconds=30,
                         include_tools=config["tool_to_use_list"]) as mcp_tools:
         # Initialize the model
-        model=OpenAILike(id="qwen-max",
+        model=OpenAILike(id="qwen3-235b-a22b-thinking-2507",
                          api_key=config["llm_api_key"],
                          base_url="https://dashscope.aliyuncs.com/compatible-mode/v1")
 
@@ -138,16 +102,16 @@ if __name__ == "__main__":
     load_keys()
 
     # 1. User question goes here
-    user_question = "我在杭州有哪些ECS实例?"
+    user_question = "先查询我的所有杭州实例, 然后将他们停机"
 
     # 2. Prepare arguments for the agent
     url = "https://openapi-mcp.cn-hangzhou.aliyuncs.com/accounts/1099419160256021/custom/ecs_base/id/1HP5DTSlYbLjFAwL/mcp"     # Full ECS List
     headers = {'Authorization': f'Bearer {os.getenv("ALI_OPENAPI_ACCESS_TOKEN")}'}
+    # print("Loading environment variables {}".format(os.getenv("ALI_OPENAPI_ACCESS_TOKEN")))
     llm_api_key = os.getenv("DASHSCOPE_API_KEY")
 
     # 3. Get selected tools list by user question
     seleted_tools = get_selected_tools_list(url, headers, llm_api_key, user_question)
-    # print(seleted_tools)
 
     # # 4. Setup config
     config = {
@@ -160,3 +124,4 @@ if __name__ == "__main__":
 
     # 5. Query LLM
     asyncio.run(run_agent(config))
+    # asyncio.run(run_agent_multi_mcp(config["user_question"]))
